@@ -10,39 +10,98 @@ function kebabCase(str: string) {
   );
 }
 
+enum VanillaDeclarationType {
+  STYLE = "style",
+  CREATE_THEME = "createTheme",
+  CREATE_THEME_CONTRACT = "createThemeContract",
+}
+
+type Rules = Map<string, string>;
+
+class VanillaDeclaration {
+  #name: string;
+  #type: VanillaDeclarationType;
+  #rules: Rules = new Map();
+  #mediaQueries = new Map<string, Rules>();
+  #selectors = new Map<string, Rules>();
+
+  constructor(name: string, type: VanillaDeclarationType) {
+    this.#name = name;
+    this.#type = type;
+  }
+
+  setRule(prop: string, val: string) {
+    this.#rules.set(prop, val);
+  }
+
+  private get rulesTemplate() {
+    let template = ``;
+    for (const [prop, val] of this.#rules) {
+      template += `
+  ${prop}: ${val};`;
+    }
+    return template;
+  }
+
+  toString() {
+    return `.${this.#name} {${this.rulesTemplate}
+}`;
+  }
+}
+
+class VanillaStylesheet {
+  declarations: Set<VanillaDeclaration> = new Set();
+}
+
 export function transformer(file: FileInfo, api: API) {
   const j = api.jscodeshift;
-
   const root = j(file.source);
-  const cssDeclarationTemplates: string[] = [];
+  // const stylesheet = new VanillaStylesheet();
+  const stylesheet: VanillaDeclaration[] = [];
 
-  root.findVariableDeclarators().forEach((path) => {
-    const cssClassName = path.getValueProperty("id").name;
-    const cssPropertyDefinitions = new Map();
+  root.find(j.VariableDeclaration).forEach((variableDeclaration) => {
+    j(variableDeclaration)
+      .find(j.CallExpression)
+      .forEach((callExpression) => {
+        // @ts-expect-error
+        const type: VanillaDeclarationType = callExpression.value.callee.name;
+        const name = callExpression.parentPath.value.id.name;
+        const declaration = new VanillaDeclaration(name, type);
+        console.log({ type });
 
-    j(path)
-      .find(j.ObjectExpression)
-      .forEach((objectExpression) => {
-        j(objectExpression)
-          .find(j.ObjectProperty)
-          .forEach((objectProperty) => {
-            cssPropertyDefinitions.set(
-              kebabCase(objectProperty.get("key").value.name),
-              objectProperty.get("value").value.value
-            );
-          });
+        if (type === VanillaDeclarationType.STYLE) {
+          j(callExpression)
+            .find(j.ObjectExpression)
+            .forEach((objectExpression) => {
+              j(objectExpression)
+                .find(j.ObjectProperty)
+                .forEach((objectProperty) => {
+                  const key = objectProperty.get("key").value.name;
+                  const value = objectProperty.get("value").value.value;
+
+                  if (key === "selectors") {
+                  } else if (key === "@media") {
+                  } else {
+                    if (key && value) {
+                      declaration.setRule(kebabCase(key), value);
+                    }
+                  }
+                });
+            });
+
+          stylesheet.push(declaration);
+        }
       });
-
-    const cssDeclarationTemplate = `.${cssClassName} {
-  ${[...cssPropertyDefinitions.entries()]
-    .map(([prop, val]) => `${prop}: ${val};`)
-    .join("\n  ")
-    .trim()}
-}`;
-    cssDeclarationTemplates.push(cssDeclarationTemplate);
   });
 
-  return cssDeclarationTemplates.join("\n\n") + "\n";
+  let template = "";
+  for (const d of stylesheet) {
+    template += `
+${d.toString()}
+`;
+  }
+
+  return template;
 }
 
 export const parser = "tsx";

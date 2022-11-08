@@ -3,7 +3,7 @@ import { transformer } from "./transformer";
 import { applyTransform } from "jscodeshift/src/testUtils";
 
 function transformArgs(input: string): Parameters<typeof applyTransform> {
-  return [transformer, {}, { source: input }, { parser: "ts" }];
+  return [transformer, {}, { source: input }, { parser: "tsx" }];
 }
 
 describe("transformer", () => {
@@ -12,7 +12,9 @@ describe("transformer", () => {
 const themeContract = createThemeContract({ color: "" });
 const theme1 = createTheme(themeContract, { color: "red" });
 const theme2 = createTheme(themeContract, { color: "blue" });
-const normalStyle = style({ color: "red" });
+const normalStyle1 = style({ color: "red" });
+const normalStyle2 = style({ color: "red" });
+const normalStyleCombined = style([normalStyle1, normalStyle2]);
 const styleWithThemeRef = style({ color: theme.color });
 const styleWithSelectors = style({ selectors: {
   "&:hover": {
@@ -28,34 +30,25 @@ const styleWithMedia = style({
 });
     `;
     expect(applyTransform(...transformArgs(input))).toMatchInlineSnapshot(`
-".themeContract {
-  color: ;
-}
-
-.theme1 {
+".normalStyle1 {
   color: red;
 }
 
-.theme2 {
-  color: blue;
+.normalStyle2 {
+  color: red;
 }
 
-.normalStyle {
-  color: red;
+.normalStyleCombined {
 }
 
 .styleWithThemeRef {
-  color: undefined;
 }
 
 .styleWithSelectors {
-  selectors: undefined;
-  : undefined;
   color: red;
 }
 
 .styleWithMedia {
-  : undefined;
   color: red;
 }"
 `);
