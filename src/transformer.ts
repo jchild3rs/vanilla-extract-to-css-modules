@@ -10,7 +10,12 @@ function kebabCase(str: string) {
   );
 }
 
-enum VanillaDeclarationType {
+enum VanillaRuleType {
+  MEDIA_QUERY = "@media",
+  SELECTORS = "selectors",
+}
+
+enum VanillaMethod {
   STYLE = "style",
   CREATE_THEME = "createTheme",
   CREATE_THEME_CONTRACT = "createThemeContract",
@@ -18,16 +23,19 @@ enum VanillaDeclarationType {
 
 type Rules = Map<string, string>;
 
-class VanillaDeclaration {
-  #name: string;
-  #type: VanillaDeclarationType;
-  #rules: Rules = new Map();
-  #mediaQueries = new Map<string, Rules>();
-  #selectors = new Map<string, Rules>();
+// TODO: Parse rules w/ variables (recursively?)
 
-  constructor(name: string, type: VanillaDeclarationType) {
+class VanillaDeclaration {
+  readonly #name: string;
+  readonly #method: VanillaMethod;
+
+  #rules: Rules = new Map();
+  mediaQueries = new Map<string, Rules>();
+  selectors = new Map<string, Rules>();
+
+  constructor(name: string, type: VanillaMethod) {
     this.#name = name;
-    this.#type = type;
+    this.#method = type;
   }
 
   setRule(prop: string, val: string) {
@@ -43,62 +51,117 @@ class VanillaDeclaration {
     return template;
   }
 
+  renderClassName() {
+    return `.${this.#name}`;
+  }
+
   toString() {
-    return `.${this.#name} {${this.rulesTemplate}
+    return `${this.renderClassName()} {${this.rulesTemplate}
 }`;
   }
 }
 
 class VanillaStylesheet {
   declarations: Set<VanillaDeclaration> = new Set();
+  themeContract: Record<string, Record<string, string>> = {};
 }
 
 export function transformer(file: FileInfo, api: API) {
   const j = api.jscodeshift;
   const root = j(file.source);
   // const stylesheet = new VanillaStylesheet();
-  const stylesheet: VanillaDeclaration[] = [];
+  const stylesheet = new VanillaStylesheet();
 
   root.find(j.VariableDeclaration).forEach((variableDeclaration) => {
     j(variableDeclaration)
       .find(j.CallExpression)
       .forEach((callExpression) => {
-        // @ts-expect-error
-        const type: VanillaDeclarationType = callExpression.value.callee.name;
-        const name = callExpression.parentPath.value.id.name;
-        const declaration = new VanillaDeclaration(name, type);
-        console.log({ type });
+        // Make sure the call expression has a name.
+        if (
+          "name" in callExpression.node.callee &&
+          typeof callExpression.node.callee.name === "string"
+        ) {
+          const method = callExpression.node.callee.name;
+          const className = callExpression.parentPath.value.id.name;
+          const declaration = new VanillaDeclaration(
+            className,
+            method as VanillaMethod
+          );
 
-        if (type === VanillaDeclarationType.STYLE) {
-          j(callExpression)
-            .find(j.ObjectExpression)
-            .forEach((objectExpression) => {
-              j(objectExpression)
-                .find(j.ObjectProperty)
-                .forEach((objectProperty) => {
-                  const key = objectProperty.get("key").value.name;
-                  const value = objectProperty.get("value").value.value;
+          callExpression.node.arguments.forEach((arg) => {
+            // @ts-ignore
+            (arg?.properties || []).forEach((prop) => {
+              const key =
+                prop.key.name || (prop.key.value as VanillaRuleType | string);
+              const value = prop.value.value;
 
-                  if (key === "selectors") {
-                  } else if (key === "@media") {
+              if (method === VanillaMethod.CREATE_THEME_CONTRACT) {
+                stylesheet.themeContract = {
+                  ...stylesheet.themeContract,
+                  [key]: value,
+                };
+              }
+
+              switch (key) {
+                case VanillaRuleType.SELECTORS:
+                  (prop.value.properties || []).forEach((prop1: any) => {
+                    const selector = prop1.key.value || prop1.key.name;
+                    const rules = new Map();
+                    (prop1.value.properties || []).forEach((prop2: any) => {
+                      rules.set(
+                        prop2.key.value || prop2.key.name,
+                        prop2.value.value
+                      );
+                    });
+                    declaration.selectors.set(selector, rules);
+                  });
+                  break;
+                case VanillaRuleType.MEDIA_QUERY:
+                  // TODO handle media queries
+                  break;
+                default:
+                  if (
+                    method === VanillaMethod.CREATE_THEME_CONTRACT ||
+                    method === VanillaMethod.CREATE_THEME
+                  ) {
+                    declaration.setRule(`--${kebabCase(key)}`, value);
                   } else {
-                    if (key && value) {
+                    if (value) {
                       declaration.setRule(kebabCase(key), value);
+                    } else {
+                      // is reference
+                      const varRef = prop.value.property.name;
+                      if (stylesheet.themeContract[varRef]) {
+                        declaration.setRule(
+                          kebabCase(key),
+                          `var(--${kebabCase(varRef)})`
+                        );
+                      }
                     }
                   }
-                });
+                  break;
+              }
             });
+          });
 
-          stylesheet.push(declaration);
+          stylesheet.declarations.add(declaration);
         }
       });
   });
 
   let template = "";
-  for (const d of stylesheet) {
+  for (const d of stylesheet.declarations) {
     template += `
 ${d.toString()}
 `;
+    for (const [selector, rules] of d.selectors) {
+      console.log(selector);
+      template += `${selector.replace("&", d.renderClassName())} {`;
+      for (const [key, value] of rules) {
+        template += `${key}: ${value};`;
+      }
+      template += "}\n";
+    }
   }
 
   return template;
