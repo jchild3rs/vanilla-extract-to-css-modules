@@ -61,7 +61,9 @@ const styleWithMedia = style({
 
       .styleWithSelectors {
       }
-      .styleWithSelectors:hover {color: red;}
+      .styleWithSelectors:hover {
+        color: red;
+      }
 
       .styleWithMedia {
         color: var(--color);
@@ -139,9 +141,15 @@ const styleWithMedia = style({
         color: red;
         font-size: 12px;
       }
-      .styleWithSelectors:hover {color: red;}
-      nav li > .styleWithSelectors {textDecoration: underline;}
-      .styleWithSelectors:active {color: blue;}"
+      .styleWithSelectors:hover {
+        color: red;
+      }
+      nav li > .styleWithSelectors {
+        text-decoration: underline;
+      }
+      .styleWithSelectors:active {
+        color: blue;
+      }"
     `);
   });
 });

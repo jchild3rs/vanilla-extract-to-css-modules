@@ -108,8 +108,9 @@ export function transformer(file: FileInfo, api: API) {
                     const selector = prop1.key.value || prop1.key.name;
                     const rules = new Map();
                     (prop1.value.properties || []).forEach((prop2: any) => {
+                      const ruleKey = prop2.key.value || prop2.key.name
                       rules.set(
-                        prop2.key.value || prop2.key.name,
+                        kebabCase(ruleKey),
                         prop2.value.value
                       );
                     });
@@ -158,7 +159,9 @@ ${d.toString()}
       console.log(selector);
       template += `${selector.replace("&", d.renderClassName())} {`;
       for (const [key, value] of rules) {
-        template += `${key}: ${value};`;
+        template += `
+  ${key}: ${value};
+`;
       }
       template += "}\n";
     }
