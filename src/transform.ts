@@ -1,4 +1,5 @@
 import type { API, FileInfo } from "jscodeshift";
+import { join } from "path";
 
 const KEBAB_REGEX = /[A-Z\u00C0-\u00D6\u00D8-\u00DE]/g;
 

@@ -1,7 +1,7 @@
-// @ts-expect-error
-import style from "@vanilla-extract/css";
+import { style } from "@vanilla-extract/css";
+import { vars } from "./fixture-vars";
 
 export const one = style({
-  color: "red",
+  color: vars.someColor,
   fontSize: "12px",
 });
