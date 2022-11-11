@@ -162,4 +162,33 @@ const styleWithMedia = style({
       }"
     `);
   });
+  it("handles media queries", () => {
+    const input = `
+    const styleWithSelectors = style({ 
+      '@media': {
+        'screen and (min-width: 768px)': {
+          padding: 10
+        },
+        '(prefers-reduced-motion)': {
+          transitionProperty: 'color'
+        }
+      }
+    });`;
+
+    expect(applyTransform(...transformArgs(input))).toMatchInlineSnapshot(`
+      ".styleWithSelectors {
+      }
+
+      @media screen and (min-width: 768px) {
+        .styleWithSelectors {
+          padding: 10;
+        }
+      }
+      @media (prefers-reduced-motion) {
+        .styleWithSelectors {
+          transition-property: color;
+        }
+      }"
+    `);
+  });
 });
