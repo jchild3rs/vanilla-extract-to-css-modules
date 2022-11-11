@@ -1,12 +1,12 @@
 {
-  "name": "y",
+  "name": "vanilla-extract-to-css-modules",
   "version": "1.0.0",
-  "description": "",
+  "description": "Transform Vanilla Extract to CSS Modules",
   "main": "index.js",
   "scripts": {
     "test": "jest"
   },
-  "author": "",
+  "author": "James Childers",
   "license": "ISC",
   "devDependencies": {
     "@swc/core": "^1.3.14",
