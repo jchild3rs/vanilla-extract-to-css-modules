@@ -182,9 +182,9 @@ export function transformer(file: FileInfo, api: API) {
                     if (value) {
                       declaration.setRule(key, value);
                     } else {
-                      const varRef = property.value.property.name;
+                      const varRef = property.value.property?.name;
 
-                      if (stylesheet.themeContract.has(varRef)) {
+                      if (varRef && stylesheet.themeContract.has(varRef)) {
                         declaration.setRule(key, kebabCase(`var(--${varRef})`));
                       }
                     }
