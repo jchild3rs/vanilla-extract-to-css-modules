@@ -1,4 +1,4 @@
-import { transformer } from "./transformer";
+import transformer from "../src/index";
 
 import { applyTransform } from "jscodeshift/src/testUtils";
 

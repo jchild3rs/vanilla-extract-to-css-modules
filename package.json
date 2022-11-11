@@ -2,13 +2,16 @@
   "name": "vanilla-extract-to-css-modules",
   "version": "1.0.0",
   "description": "Transform Vanilla Extract to CSS Modules",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
-    "test": "jest"
+    "build": "swc src -d dist",
+    "test": "jest",
+    "test:bin": "npm run build && jscodeshift -d -t ./dist/index.js test/fixture-basic.ts -p"
   },
   "author": "James Childers",
   "license": "ISC",
   "devDependencies": {
+    "@swc/cli": "^0.1.57",
     "@swc/core": "^1.3.14",
     "@swc/jest": "^0.2.23",
     "@tsconfig/node16": "^1.0.3",
@@ -20,7 +23,6 @@
     "typescript": "^4.8.4"
   },
   "dependencies": {
-    "csstype": "^3.1.1",
     "jscodeshift": "^0.14.0"
   }
 }

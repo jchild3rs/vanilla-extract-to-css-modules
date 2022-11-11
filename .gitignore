@@ -32,6 +32,7 @@ build
 BUILD-INFO
 DEPLOY-INFO
 coverage
+dist
 node_modules
 report.json
 reports
