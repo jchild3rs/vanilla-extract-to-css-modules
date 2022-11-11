@@ -1,4 +1,4 @@
-import type { API, FileInfo, ObjectProperty } from "jscodeshift";
+import type { API, FileInfo } from "jscodeshift";
 
 const KEBAB_REGEX = /[A-Z\u00C0-\u00D6\u00D8-\u00DE]/g;
 
@@ -33,19 +33,19 @@ function formatRuleValue(ruleName: string, ruleValue: string | number) {
   return ruleValue;
 }
 
-function parseRules(
-  properties: ObjectProperty[],
-  rulesMap: Map<string, Rules>
-) {
-  (properties || []).forEach((prop1: any) => {
-    const selector = prop1.key.value || prop1.key.name;
+// TODO fix types
+function parseRules(properties: any[], rulesMap: Map<string, Rules>) {
+  for (const styleProperty of properties) {
+    const selector = styleProperty.key.value || styleProperty.key.name;
     const rules = new Rules();
-    (prop1.value.properties || []).forEach((prop2: any) => {
-      const ruleKey = prop2.key.value || prop2.key.name;
-      rules.setRule(ruleKey, prop2.value.value);
-    });
+
+    for (const ruleProperty of styleProperty.value.properties || []) {
+      const ruleKey = ruleProperty.key.value || ruleProperty.key.name;
+      rules.setRule(ruleKey, ruleProperty.value.value);
+    }
+
     rulesMap.set(selector, rules);
-  });
+  }
 }
 
 class Rules {
