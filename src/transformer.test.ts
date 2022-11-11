@@ -197,12 +197,12 @@ const styleWithMedia = style({
 
       @media screen and (min-width: 768px) {
         .styleWithSelectors {
-          padding: 10;
+          padding: 10px;
         }
       }
       @media (prefers-reduced-motion) {
         .styleWithSelectors {
-          transitionProperty: color;
+          transition-property: color;
         }
       }"
     `);

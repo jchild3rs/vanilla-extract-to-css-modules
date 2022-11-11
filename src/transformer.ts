@@ -1,4 +1,4 @@
-import type { API, FileInfo } from "jscodeshift";
+import type { API, FileInfo, ObjectProperty } from "jscodeshift";
 
 const KEBAB_REGEX = /[A-Z\u00C0-\u00D6\u00D8-\u00DE]/g;
 
@@ -13,15 +13,58 @@ enum VanillaMethod {
   CREATE_THEME_CONTRACT = "createThemeContract",
 }
 
-type Rules = Map<string, string>;
+function kebabCase(str: string) {
+  return (
+    str?.replace(KEBAB_REGEX, function (match) {
+      return "-" + match.toLowerCase();
+    }) ?? ""
+  );
+}
 
-// TODO: Parse rules w/ variables (recursively?)
+function formatRuleName(str: string) {
+  return kebabCase(str);
+}
 
-class VanillaDeclaration {
+// TODO this is probably not good enough...
+function formatRuleValue(ruleName: string, ruleValue: string | number) {
+  if (typeof ruleValue === "number" && ruleName !== "lineHeight") {
+    return `${ruleValue}px`;
+  }
+  return ruleValue;
+}
+
+function parseRules(
+  properties: ObjectProperty[],
+  rulesMap: Map<string, Rules>
+) {
+  (properties || []).forEach((prop1: any) => {
+    const selector = prop1.key.value || prop1.key.name;
+    const rules = new Rules();
+    (prop1.value.properties || []).forEach((prop2: any) => {
+      const ruleKey = prop2.key.value || prop2.key.name;
+      rules.setRule(ruleKey, prop2.value.value);
+    });
+    rulesMap.set(selector, rules);
+  });
+}
+
+class Rules {
+  #rules = new Map<string, string | number>();
+
+  setRule(name: string, value: string | number) {
+    this.#rules.set(formatRuleName(name), formatRuleValue(name, value));
+  }
+
+  getAllRules() {
+    return this.#rules;
+  }
+}
+
+class StylesheetDeclaration {
   readonly #name: string;
   readonly #method: VanillaMethod;
 
-  #rules: Rules = new Map();
+  rules = new Rules();
   mediaQueries = new Map<string, Rules>();
   selectors = new Map<string, Rules>();
 
@@ -30,17 +73,13 @@ class VanillaDeclaration {
     this.#method = type;
   }
 
-  setRule(prop: string, val: string) {
-    let v = val;
-    if (prop !== "lineHeight") {
-      v = parseRuleValue(val);
-    }
-    this.#rules.set(kebabCase(prop), v);
+  setRule(name: string, value: string | number) {
+    this.rules.setRule(name, value);
   }
 
   private get rulesTemplate() {
     let template = ``;
-    for (const [prop, val] of this.#rules) {
+    for (const [prop, val] of this.rules.getAllRules()) {
       template += `
   ${prop}: ${val};`;
     }
@@ -58,54 +97,83 @@ class VanillaDeclaration {
 }
 
 class VanillaStylesheet {
-  declarations: Set<VanillaDeclaration> = new Set();
+  declarations: Set<StylesheetDeclaration> = new Set();
+
   themeContract: Record<string, Record<string, string>> = {};
-}
 
-function kebabCase(str: string) {
-  return (
-    str?.replace(KEBAB_REGEX, function (match) {
-      return "-" + match.toLowerCase();
-    }) ?? ""
-  );
+  toSource() {
+    let template = "";
+    for (const declaration of this.declarations) {
+      template += `
+${declaration.renderClassName()} {`;
+      for (const [prop, val] of declaration.rules.getAllRules()) {
+        template += `
+  ${prop}: ${val};`;
+      }
+      template += `
 }
+`;
+      for (const [selector, selectorRules] of declaration.selectors) {
+        template += `
+${selector.replace("&", declaration.renderClassName())} {`;
+        for (const [key, value] of selectorRules.getAllRules()) {
+          template += `
+  ${key}: ${value};
+`;
+        }
+        template += `}
+`;
+      }
 
-function parseRuleValue(ruleValue: string | number) {
-  // this is probably not good enough...
-  if (typeof ruleValue === "number") {
-    return `${ruleValue}px`;
+      for (const [mediaQuery, mediaQueryRules] of declaration.mediaQueries) {
+        template += `
+@media ${mediaQuery} {
+  ${declaration.renderClassName()} {`;
+        for (const [key, value] of mediaQueryRules.getAllRules()) {
+          template += `
+    ${key}: ${value};
+  `;
+        }
+        template += `}
+}`;
+      }
+    }
+
+    return template;
   }
-  return ruleValue;
 }
 
 export function transformer(file: FileInfo, api: API) {
   const j = api.jscodeshift;
   const root = j(file.source);
-  // const stylesheet = new VanillaStylesheet();
   const stylesheet = new VanillaStylesheet();
 
   root.find(j.VariableDeclaration).forEach((variableDeclaration) => {
     j(variableDeclaration)
       .find(j.CallExpression)
       .forEach((callExpression) => {
-        // Make sure the call expression has a name.
         if (
           "name" in callExpression.node.callee &&
           typeof callExpression.node.callee.name === "string"
         ) {
           const method = callExpression.node.callee.name;
           const className = callExpression.parentPath.value.id.name;
-          const declaration = new VanillaDeclaration(
+          const declaration = new StylesheetDeclaration(
             className,
             method as VanillaMethod
           );
 
-          callExpression.node.arguments.forEach((arg) => {
-            // @ts-ignore
-            (arg?.properties || []).forEach((prop) => {
+          for (const arg of callExpression.node.arguments) {
+            if (!("properties" in arg)) {
+              continue;
+            }
+
+            // TODO fix types
+            for (const property of arg.properties as any[]) {
               const key =
-                prop.key.name || (prop.key.value as VanillaRuleType | string);
-              const value = prop.value.value;
+                property.key.name ||
+                (property.key.value as VanillaRuleType | string);
+              const value = property.value.value;
 
               if (method === VanillaMethod.CREATE_THEME_CONTRACT) {
                 stylesheet.themeContract = {
@@ -116,27 +184,13 @@ export function transformer(file: FileInfo, api: API) {
 
               switch (key) {
                 case VanillaRuleType.SELECTORS:
-                  (prop.value.properties || []).forEach((prop1: any) => {
-                    const selector = prop1.key.value || prop1.key.name;
-                    const rules = new Map();
-                    (prop1.value.properties || []).forEach((prop2: any) => {
-                      const ruleKey = prop2.key.value || prop2.key.name;
-                      rules.set(kebabCase(ruleKey), prop2.value.value);
-                    });
-                    declaration.selectors.set(selector, rules);
-                  });
+                  parseRules(property.value.properties, declaration.selectors);
                   break;
                 case VanillaRuleType.MEDIA_QUERY:
-                  (prop.value.properties || []).forEach((prop1: any) => {
-                    const mediaQuery = prop1.key.value || prop1.key.name;
-                    const rules = new Map();
-                    (prop1.value.properties || []).forEach((prop2: any) => {
-                      const ruleKey = prop2.key.value || prop2.key.name;
-                      const ruleValue = prop2.value.value;
-                      rules.set(ruleKey, ruleValue);
-                    });
-                    declaration.mediaQueries.set(mediaQuery, rules);
-                  });
+                  parseRules(
+                    property.value.properties,
+                    declaration.mediaQueries
+                  );
                   break;
                 default:
                   if (
@@ -144,58 +198,26 @@ export function transformer(file: FileInfo, api: API) {
                     method === VanillaMethod.CREATE_THEME
                   ) {
                     declaration.setRule(`--${key}`, value);
+                  } else if (value) {
+                    declaration.setRule(key, value);
                   } else {
-                    if (value) {
-                      declaration.setRule(key, value);
-                    } else {
-                      // is reference
-                      const varRef = prop.value.property.name;
-                      if (stylesheet.themeContract[varRef]) {
-                        declaration.setRule(key, `var(--${kebabCase(varRef)})`);
-                      }
+                    const varRef = property.value.property.name;
+
+                    if (stylesheet.themeContract[varRef]) {
+                      declaration.setRule(key, kebabCase(`var(--${varRef})`));
                     }
                   }
                   break;
               }
-            });
-          });
+            }
+          }
 
           stylesheet.declarations.add(declaration);
         }
       });
   });
 
-  let template = "";
-  for (const d of stylesheet.declarations) {
-    template += `
-${d.toString()}
-`;
-    for (const [selector, rules] of d.selectors) {
-      template += `
-${selector.replace("&", d.renderClassName())} {`;
-      for (const [key, value] of rules) {
-        template += `
-  ${key}: ${value};
-`;
-      }
-      template += "}\n";
-    }
-
-    for (const [mediaQuery, rules] of d.mediaQueries) {
-      template += `
-@media ${mediaQuery} {
-  ${d.renderClassName()} {`;
-      for (const [key, value] of rules) {
-        template += `
-    ${key}: ${value};
-  `;
-      }
-      template += `}
-}`;
-    }
-  }
-
-  return template;
+  return stylesheet.toSource();
 }
 
 export const parser = "tsx";
