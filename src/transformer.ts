@@ -14,11 +14,7 @@ enum VanillaMethod {
 }
 
 function kebabCase(str: string) {
-  return (
-    str?.replace(KEBAB_REGEX, function (match) {
-      return "-" + match.toLowerCase();
-    }) ?? ""
-  );
+  return str.replace(KEBAB_REGEX, (match) => "-" + match.toLowerCase());
 }
 
 function formatRuleName(str: string) {
@@ -30,6 +26,7 @@ function formatRuleValue(ruleName: string, ruleValue: string | number) {
   if (typeof ruleValue === "number" && ruleName !== "lineHeight") {
     return `${ruleValue}px`;
   }
+
   return ruleValue;
 }
 
@@ -77,35 +74,21 @@ class StylesheetDeclaration {
     this.rules.setRule(name, value);
   }
 
-  private get rulesTemplate() {
-    let template = ``;
-    for (const [prop, val] of this.rules.getAllRules()) {
-      template += `
-  ${prop}: ${val};`;
-    }
-    return template;
-  }
-
-  renderClassName() {
+  getClassName() {
     return `.${this.#name}`;
-  }
-
-  toString() {
-    return `${this.renderClassName()} {${this.rulesTemplate}
-}`;
   }
 }
 
 class VanillaStylesheet {
   declarations: Set<StylesheetDeclaration> = new Set();
 
-  themeContract: Record<string, Record<string, string>> = {};
+  themeContract: Map<string, Map<string, string>> = new Map();
 
   toSource() {
     let template = "";
     for (const declaration of this.declarations) {
       template += `
-${declaration.renderClassName()} {`;
+${declaration.getClassName()} {`;
       for (const [prop, val] of declaration.rules.getAllRules()) {
         template += `
   ${prop}: ${val};`;
@@ -115,7 +98,7 @@ ${declaration.renderClassName()} {`;
 `;
       for (const [selector, selectorRules] of declaration.selectors) {
         template += `
-${selector.replace("&", declaration.renderClassName())} {`;
+${selector.replace("&", declaration.getClassName())} {`;
         for (const [key, value] of selectorRules.getAllRules()) {
           template += `
   ${key}: ${value};
@@ -128,7 +111,7 @@ ${selector.replace("&", declaration.renderClassName())} {`;
       for (const [mediaQuery, mediaQueryRules] of declaration.mediaQueries) {
         template += `
 @media ${mediaQuery} {
-  ${declaration.renderClassName()} {`;
+  ${declaration.getClassName()} {`;
         for (const [key, value] of mediaQueryRules.getAllRules()) {
           template += `
     ${key}: ${value};
@@ -176,10 +159,7 @@ export function transformer(file: FileInfo, api: API) {
               const value = property.value.value;
 
               if (method === VanillaMethod.CREATE_THEME_CONTRACT) {
-                stylesheet.themeContract = {
-                  ...stylesheet.themeContract,
-                  [key]: value,
-                };
+                stylesheet.themeContract.set(key, value);
               }
 
               switch (key) {
@@ -198,13 +178,15 @@ export function transformer(file: FileInfo, api: API) {
                     method === VanillaMethod.CREATE_THEME
                   ) {
                     declaration.setRule(`--${key}`, value);
-                  } else if (value) {
-                    declaration.setRule(key, value);
-                  } else {
-                    const varRef = property.value.property.name;
+                  } else if (method === VanillaMethod.STYLE) {
+                    if (value) {
+                      declaration.setRule(key, value);
+                    } else {
+                      const varRef = property.value.property.name;
 
-                    if (stylesheet.themeContract[varRef]) {
-                      declaration.setRule(key, kebabCase(`var(--${varRef})`));
+                      if (stylesheet.themeContract.has(varRef)) {
+                        declaration.setRule(key, kebabCase(`var(--${varRef})`));
+                      }
                     }
                   }
                   break;
