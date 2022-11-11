@@ -108,17 +108,23 @@ export function transformer(file: FileInfo, api: API) {
                     const selector = prop1.key.value || prop1.key.name;
                     const rules = new Map();
                     (prop1.value.properties || []).forEach((prop2: any) => {
-                      const ruleKey = prop2.key.value || prop2.key.name
-                      rules.set(
-                        kebabCase(ruleKey),
-                        prop2.value.value
-                      );
+                      const ruleKey = prop2.key.value || prop2.key.name;
+                      rules.set(kebabCase(ruleKey), prop2.value.value);
                     });
                     declaration.selectors.set(selector, rules);
                   });
                   break;
                 case VanillaRuleType.MEDIA_QUERY:
                   // TODO handle media queries
+                  (prop.value.properties || []).forEach((prop1: any) => {
+                    const mediaQuery = prop1.key.value || prop1.key.name;
+                    const rules = new Map();
+                    (prop1.value.properties || []).forEach((prop2: any) => {
+                      const ruleKey = prop2.key.value || prop2.key.name;
+                      rules.set(kebabCase(ruleKey), prop2.value.value);
+                    });
+                    declaration.mediaQueries.set(mediaQuery, rules);
+                  });
                   break;
                 default:
                   if (
@@ -156,14 +162,27 @@ export function transformer(file: FileInfo, api: API) {
 ${d.toString()}
 `;
     for (const [selector, rules] of d.selectors) {
-      console.log(selector);
-      template += `${selector.replace("&", d.renderClassName())} {`;
+      template += `
+${selector.replace('&', d.renderClassName())} {`;
       for (const [key, value] of rules) {
         template += `
   ${key}: ${value};
 `;
       }
       template += "}\n";
+    }
+
+    for (const [mediaQuery, rules] of d.mediaQueries) {
+      template += `
+@media ${mediaQuery} {
+  ${d.renderClassName()} {`;
+      for (const [key, value] of rules) {
+        template += `
+    ${key}: ${value};
+  `;
+      }
+      template += `}
+}`;
     }
   }
 
