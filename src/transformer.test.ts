@@ -162,6 +162,22 @@ const styleWithMedia = style({
       }"
     `);
   });
+
+  it("handles number values", () => {
+    const input = `
+    const styleWithSelectors = style({ 
+      width: 300,
+      lineHeight: 1.5
+    });`;
+
+    expect(applyTransform(...transformArgs(input))).toMatchInlineSnapshot(`
+      ".styleWithSelectors {
+        width: 300px;
+        line-height: 1.5;
+      }"
+    `);
+  });
+
   it("handles media queries", () => {
     const input = `
     const styleWithSelectors = style({ 
@@ -186,7 +202,7 @@ const styleWithMedia = style({
       }
       @media (prefers-reduced-motion) {
         .styleWithSelectors {
-          transition-property: color;
+          transitionProperty: color;
         }
       }"
     `);

@@ -2,14 +2,6 @@ import type { API, FileInfo } from "jscodeshift";
 
 const KEBAB_REGEX = /[A-Z\u00C0-\u00D6\u00D8-\u00DE]/g;
 
-function kebabCase(str: string) {
-  return (
-    str?.replace(KEBAB_REGEX, function (match) {
-      return "-" + match.toLowerCase();
-    }) ?? ""
-  );
-}
-
 enum VanillaRuleType {
   MEDIA_QUERY = "@media",
   SELECTORS = "selectors",
@@ -39,7 +31,11 @@ class VanillaDeclaration {
   }
 
   setRule(prop: string, val: string) {
-    this.#rules.set(prop, val);
+    let v = val;
+    if (prop !== "lineHeight") {
+      v = parseRuleValue(val);
+    }
+    this.#rules.set(kebabCase(prop), v);
   }
 
   private get rulesTemplate() {
@@ -64,6 +60,22 @@ class VanillaDeclaration {
 class VanillaStylesheet {
   declarations: Set<VanillaDeclaration> = new Set();
   themeContract: Record<string, Record<string, string>> = {};
+}
+
+function kebabCase(str: string) {
+  return (
+    str?.replace(KEBAB_REGEX, function (match) {
+      return "-" + match.toLowerCase();
+    }) ?? ""
+  );
+}
+
+function parseRuleValue(ruleValue: string | number) {
+  // this is probably not good enough...
+  if (typeof ruleValue === "number") {
+    return `${ruleValue}px`;
+  }
+  return ruleValue;
 }
 
 export function transformer(file: FileInfo, api: API) {
@@ -115,13 +127,13 @@ export function transformer(file: FileInfo, api: API) {
                   });
                   break;
                 case VanillaRuleType.MEDIA_QUERY:
-                  // TODO handle media queries
                   (prop.value.properties || []).forEach((prop1: any) => {
                     const mediaQuery = prop1.key.value || prop1.key.name;
                     const rules = new Map();
                     (prop1.value.properties || []).forEach((prop2: any) => {
                       const ruleKey = prop2.key.value || prop2.key.name;
-                      rules.set(kebabCase(ruleKey), prop2.value.value);
+                      const ruleValue = prop2.value.value;
+                      rules.set(ruleKey, ruleValue);
                     });
                     declaration.mediaQueries.set(mediaQuery, rules);
                   });
@@ -131,18 +143,15 @@ export function transformer(file: FileInfo, api: API) {
                     method === VanillaMethod.CREATE_THEME_CONTRACT ||
                     method === VanillaMethod.CREATE_THEME
                   ) {
-                    declaration.setRule(`--${kebabCase(key)}`, value);
+                    declaration.setRule(`--${key}`, value);
                   } else {
                     if (value) {
-                      declaration.setRule(kebabCase(key), value);
+                      declaration.setRule(key, value);
                     } else {
                       // is reference
                       const varRef = prop.value.property.name;
                       if (stylesheet.themeContract[varRef]) {
-                        declaration.setRule(
-                          kebabCase(key),
-                          `var(--${kebabCase(varRef)})`
-                        );
+                        declaration.setRule(key, `var(--${kebabCase(varRef)})`);
                       }
                     }
                   }
@@ -163,7 +172,7 @@ ${d.toString()}
 `;
     for (const [selector, rules] of d.selectors) {
       template += `
-${selector.replace('&', d.renderClassName())} {`;
+${selector.replace("&", d.renderClassName())} {`;
       for (const [key, value] of rules) {
         template += `
   ${key}: ${value};
