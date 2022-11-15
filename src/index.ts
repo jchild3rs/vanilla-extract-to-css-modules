@@ -1,16 +1,17 @@
 // @ts-nocheck
 import * as fs from "fs";
+import { MemberExpression } from "jscodeshift";
 
 export const parser = "tsx";
-const {join} = require('path')
+const { join } = require("path");
 
 const KEBAB_REGEX = /[A-Z\u00C0-\u00D6\u00D8-\u00DE]/g;
 
 function kebabCase(str) {
   return str
     ? str.replace(KEBAB_REGEX, function (match) {
-      return "-" + match.toLowerCase();
-    })
+        return "-" + match.toLowerCase();
+      })
     : "";
 }
 
@@ -21,13 +22,14 @@ function parseRules(properties, rulesMap, j) {
 
     if (styleProperty.key.type === "MemberExpression") {
       if (styleProperty.key.object.name === "breakpoints") {
-        selector = `(--screen-${styleProperty.key.property.name || styleProperty.key.property.value})`;
+        selector = `(--screen-${
+          styleProperty.key.property.name || styleProperty.key.property.value
+        })`;
       }
     }
 
     for (const ruleProperty of styleProperty.value.properties || []) {
       let ruleKey = ruleProperty.key.value || ruleProperty.key.name;
-      // console.log({ ruleKey });
       const ruleIsValid =
         ruleProperty.value.type === "StringLiteral" ||
         ruleProperty.value.type === "NumericLiteral" ||
@@ -37,9 +39,7 @@ function parseRules(properties, rulesMap, j) {
         if (ruleProperty.value.type === "NumericLiteral") {
           if (ruleKey !== "lineHeight") {
             rules.set(ruleKey, `${ruleProperty.value.value}px`);
-            // style.rules.set(key, );
           } else {
-            // style.rules.set(key, prop.value.value);
             rules.set(ruleKey, ruleProperty.value.value);
           }
         } else {
@@ -52,6 +52,39 @@ function parseRules(properties, rulesMap, j) {
             rules.set(ruleKey, kebabCase(ruleProperty1.value.value));
           }
         }
+      } else if (ruleProperty.value.type === "TemplateLiteral") {
+        const parts = [];
+        (ruleProperty.value.expressions || []).forEach(
+          (expression: MemberExpression) => {
+            const tokens = [];
+            const more = [];
+            j(expression)
+              .find(j.Identifier)
+              .forEach((path, i) => {
+                if (path.value.name !== "vars") {
+                  if (
+                    !path.value.name.toLowerCase().includes("theme") &&
+                    !path.value.name.toLowerCase().includes("contract")
+                  ) {
+                    tokens.push(kebabCase(path.value.name));
+                  }
+                }
+
+                const extra = path.parentPath.parentPath.value;
+                if (extra) {
+                  if (extra.property) {
+                    if (extra.property.value) {
+                      if (!more.includes(extra.property.value)) {
+                        more.push(extra.property.value);
+                      }
+                    }
+                  }
+                }
+              });
+            parts.push(`var(--${tokens.concat(more).join("-")})`);
+          }
+        );
+        rules.set(ruleKey, kebabCase(parts.join(" ")));
       } else if (ruleProperty.value.type === "MemberExpression") {
         const tokens = [];
         const more = [];
@@ -59,7 +92,6 @@ function parseRules(properties, rulesMap, j) {
           .find([j.Identifier])
           .filter((path) => path.type === "object" || path.name === "property")
           .forEach((path, i) => {
-            // console.log(path);
             if (
               !path.value.name.toLowerCase().includes("theme") &&
               !path.value.name.toLowerCase().includes("contract")
@@ -78,7 +110,10 @@ function parseRules(properties, rulesMap, j) {
           });
 
         if (tokens.length > 0) {
-          rules.set(ruleKey, kebabCase(`var(--${tokens.concat(more).join("-")})`));
+          rules.set(
+            ruleKey,
+            kebabCase(`var(--${tokens.concat(more).join("-")})`)
+          );
         }
       }
     }
@@ -167,7 +202,6 @@ class Stylesheet {
 }
 
 export default function transformer({ path, source }, api, { dry }) {
-  // console.log(file, options);
   const j = api.jscodeshift;
   const root = j(source);
   const variableDeclarators = root.findVariableDeclarators();
@@ -177,7 +211,10 @@ export default function transformer({ path, source }, api, { dry }) {
     j(variableDeclarator)
       .find(j.CallExpression)
       .forEach((callExp) => {
-        if (callExp.node.callee.name === "createTheme" || callExp.node.callee.name === "createThemeContract") {
+        if (
+          callExp.node.callee.name === "createTheme" ||
+          callExp.node.callee.name === "createThemeContract"
+        ) {
           const themeName = variableDeclarator.value.id.name;
 
           callExp.value.arguments
@@ -196,7 +233,10 @@ export default function transformer({ path, source }, api, { dry }) {
                 if (ruleIsValid) {
                   if (prop.value.type === "NumericLiteral") {
                   }
-                  vars.set(kebabCase(`--${key}`), prop.value.value || "inherit");
+                  vars.set(
+                    kebabCase(`--${key}`),
+                    prop.value.value || "inherit"
+                  );
                   varsRaw[key] = prop.value.value || null;
                 } else if (prop.value.type === "ObjectExpression") {
                   prop.value.properties.forEach((prop2) => {
@@ -205,7 +245,10 @@ export default function transformer({ path, source }, api, { dry }) {
                       prop2.value.type === "NumericLiteral" ||
                       prop2.value.type === "NullLiteral"
                     ) {
-                      vars.set(kebabCase(`--${key}-${prop2.key.name}`), prop2.value.value || "inherit");
+                      vars.set(
+                        kebabCase(`--${key}-${prop2.key.name}`),
+                        prop2.value.value || "inherit"
+                      );
                       varsRaw[key] = varsRaw[key] || {};
                       varsRaw[key][prop2.key.name] = prop2.value.value || null;
                     }
@@ -222,7 +265,6 @@ export default function transformer({ path, source }, api, { dry }) {
             .filter((path) => path.type === "ObjectExpression")
             .forEach((arg) => {
               const style = new Style();
-              //parseRules(arg.properties, style.rules, j);
               arg.properties.forEach((prop) => {
                 const key = prop.key.name || prop.key.value;
 
@@ -245,12 +287,48 @@ export default function transformer({ path, source }, api, { dry }) {
                     } else {
                       style.rules.set(key, prop.value.value);
                     }
+                  } else if (prop.value.type === "TemplateLiteral") {
+                    const parts = [];
+                    (prop.value.expressions || []).forEach(
+                      (expression: MemberExpression) => {
+                        const tokens = [];
+                        const more = [];
+                        j(expression)
+                          .find(j.Identifier)
+                          .forEach((path, i) => {
+                            if (path.value.name !== "vars") {
+                              if (
+                                !path.value.name
+                                  .toLowerCase()
+                                  .includes("theme") &&
+                                !path.value.name
+                                  .toLowerCase()
+                                  .includes("contract")
+                              ) {
+                                tokens.push(kebabCase(path.value.name));
+                              }
+                            }
+
+                            const extra = path.parentPath.parentPath.value;
+                            if (extra) {
+                              if (extra.property) {
+                                if (extra.property.value) {
+                                  if (!more.includes(extra.property.value)) {
+                                    more.push(extra.property.value);
+                                  }
+                                }
+                              }
+                            }
+                          });
+                        parts.push(`var(--${tokens.concat(more).join("-")})`);
+                      }
+                    );
+                    style.rules.set(key, kebabCase(parts.join(" ")));
                   } else if (prop.value.type === "MemberExpression") {
                     const tokens = [];
                     const more = [];
                     j(prop)
                       .find(j.Identifier)
-                      //.filter((path) => path.parentPath.type === "object" || path.parentPath.name === "property")
                       .forEach((path, i) => {
                         if (i !== 0 && path.value.name !== "vars") {
                           if (
@@ -259,8 +337,6 @@ export default function transformer({ path, source }, api, { dry }) {
                           ) {
                             tokens.push(kebabCase(path.value.name));
                           }
-
-                          // console.log(path.value.name);
                         }
 
                         const extra = path.parentPath.value.value;
@@ -273,12 +349,12 @@ export default function transformer({ path, source }, api, { dry }) {
                         }
                       });
 
-                    //console.log(tokens);
-
-                    style.rules.set(key, kebabCase(`var(--${tokens.concat(more).join("-")})`));
+                    style.rules.set(
+                      key,
+                      kebabCase(`var(--${tokens.concat(more).join("-")})`)
+                    );
                   }
                 }
-                //console.log(prop);
               });
               stylesheet.styles.set(className, style);
             });
@@ -287,12 +363,11 @@ export default function transformer({ path, source }, api, { dry }) {
   });
 
   if (!dry) {
-    const newPath = join(process.cwd(), path).replace('.css.ts', '.module.css')
-    fs.writeFileSync(newPath, stylesheet.toSource(), 'utf-8')
+    const newPath = join(process.cwd(), path).replace(".css.ts", ".module.css");
+    fs.writeFileSync(newPath, stylesheet.toSource(), "utf-8");
 
-
-    return source
+    return source;
   }
 
-  return stylesheet.toSource()
+  return stylesheet.toSource();
 }

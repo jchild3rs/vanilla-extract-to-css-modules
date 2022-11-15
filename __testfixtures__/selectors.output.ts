@@ -5,6 +5,7 @@
 
 .styleWithSelectors:hover {
   color: red;
+  margin: var(--space-2x) var(--space-4x);
 }
 
 .styleWithSelectorsnav li >  {
