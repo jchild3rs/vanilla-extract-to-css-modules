@@ -164,10 +164,10 @@ class Stylesheet {
       if (style.selectors) {
         for (const [prop, value] of style.selectors) {
           template += `
-.${className}`;
+`;
 
           if (prop) {
-            template += `${prop.replace("&", "")} {`;
+            template += `${prop.replace("&", `.${className}`)} {`;
             for (const [p, v] of value) {
               template += `
   ${kebabCase(p)}: ${p === "content" && !v ? '""' : v};`;

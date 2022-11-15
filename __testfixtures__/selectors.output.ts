@@ -8,7 +8,7 @@
   margin: var(--space-2x) var(--space-4x);
 }
 
-.styleWithSelectorsnav li >  {
+nav li > .styleWithSelectors {
   text-decoration: underline;
 }
 
