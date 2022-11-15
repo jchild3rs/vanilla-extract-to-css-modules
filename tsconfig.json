@@ -1,5 +1,5 @@
 {
   "extends": "@tsconfig/node16/tsconfig.json",
   "include": ["src", "test/transformer.test.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "__testfixtures__"]
 }
